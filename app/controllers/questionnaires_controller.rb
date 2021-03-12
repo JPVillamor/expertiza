@@ -6,6 +6,10 @@ class QuestionnairesController < ApplicationController
   # Each Questionnaire contains zero or more questions (Question)
   # Generally a questionnaire is associated with an assignment (Assignment)
 
+  FIRST_INDEX = 0
+  QUESTIONNAIRE_ID_ZERO = 0
+  INDEX_OFFSET = 1
+
   before_action :authorize
 
   # Check role access for edit questionnaire
@@ -56,7 +60,7 @@ class QuestionnairesController < ApplicationController
       redirect_to controller: 'questionnaires', action: 'new', model: params[:questionnaire][:type], private: params[:questionnaire][:private]
     else
       questionnaire_private = params[:questionnaire][:private] == 'true'
-      display_type = params[:questionnaire][:type].split('Questionnaire')[0]
+      display_type = params[:questionnaire][:type].split('Questionnaire')[FIRST_INDEX]
       begin
         @questionnaire = Object.const_get(params[:questionnaire][:type]).new if Questionnaire::QUESTIONNAIRE_TYPES.include? params[:questionnaire][:type]
       rescue StandardError
@@ -185,7 +189,7 @@ class QuestionnairesController < ApplicationController
   def add_new_questions
     questionnaire_id = params[:id] unless params[:id].nil?
     num_of_existed_questions = Questionnaire.find(questionnaire_id).questions.size
-    ((num_of_existed_questions + 1)..(num_of_existed_questions + params[:question][:total_num].to_i)).each do |i|
+    ((num_of_existed_questions + INDEX_OFFSET)..(num_of_existed_questions + params[:question][:total_num].to_i)).each do |i|
       question = Object.const_get(params[:question][:type]).create(txt: '', questionnaire_id: questionnaire_id, seq: i, type: params[:question][:type], break_before: true)
       if question.is_a? ScoredQuestion
         question.weight = params[:question][:weight]
@@ -194,6 +198,7 @@ class QuestionnairesController < ApplicationController
       end
       question.size = '50, 3' if question.is_a? Criterion
       question.size = '50, 3' if question.is_a? Cake
+      # FIXME: Below: Do not assume 1-5 only!
       question.alternatives = '0|1|2|3|4|5' if question.is_a? Dropdown
       question.size = '60, 5' if question.is_a? TextArea
       question.size = '30' if question.is_a? TextField
@@ -240,7 +245,7 @@ class QuestionnairesController < ApplicationController
   def save
     @questionnaire.save!
 
-    save_questions @questionnaire.id if !@questionnaire.id.nil? and @questionnaire.id > 0
+    save_questions @questionnaire.id if !@questionnaire.id.nil? and @questionnaire.id > QUESTIONNAIRE_ID_ZERO
     # We do not create node for quiz questionnaires
     if @questionnaire.type != "QuizQuestionnaire"
       p_folder = TreeFolder.find_by(name: @questionnaire.display_type)
@@ -263,7 +268,7 @@ class QuestionnairesController < ApplicationController
         q.seq = question_key.to_i
         if @questionnaire.type == "QuizQuestionnaire"
           # using the weight user enters when creating quiz
-          weight_key = "question_#{index + 1}"
+          weight_key = "question_#{index + INDEX_OFFSET}"
           q.weight = params[:question_weights][weight_key.to_sym]
         end
         q.save unless q.txt.strip.empty?
